@@ -1,0 +1,17 @@
+{
+  "name": "pph-calculator-webapp",
+  "version": "1.0.0",
+  "description": "Indonesian Income Tax (PPH) Calculator - Web Application",
+  "author": "denizak",
+  "license": "MIT",
+  "scripts": {
+    "build:webapp": "tsc",
+    "build:webapp:watch": "tsc --watch",
+    "dev": "tsc --watch",
+    "start": "npx http-server docs -p 5500 -o"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3",
+    "http-server": "^14.1. 1"
+  }
+}

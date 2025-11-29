@@ -1,0 +1,305 @@
+<! DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PPH Calculator - Indonesian Tax Calculator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 800px;
+            width: 100%;
+            padding: 40px;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        . subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        . form-group {
+            margin-bottom: 24px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 12px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0. 3s;
+        }
+
+        . btn-calculate {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-calculate:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-reset {
+            background: #f0f0f0;
+            color: #333;
+        }
+
+        .btn-reset:hover {
+            background: #e0e0e0;
+        }
+
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9ff;
+            border-radius: 8px;
+            display: none;
+        }
+
+        .results.show {
+            display: block;
+        }
+
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .result-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .result-value {
+            color: #333;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+        }
+
+        .result-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #667eea;
+        }
+
+        .result-section:first-of-type {
+            margin-top: 0;
+            padding-top: 0;
+            border-top: none;
+        }
+
+        .section-title {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 14px;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+
+        .error {
+            background: #fef2f2;
+            color: #dc2626;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            . container {
+                padding: 20px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💰 PPH Calculator</h1>
+        <p class="subtitle">Indonesian Income Tax (Pajak Penghasilan) Calculator</p>
+
+        <div class="error" id="error"></div>
+
+        <form id="taxForm">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="grossIncome">Gross Annual Income (IDR)</label>
+                    <input type="number" id="grossIncome" name="grossIncome" placeholder="0" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label for="ptkpStatus">PTKP Status</label>
+                    <select id="ptkpStatus" name="ptkpStatus" required>
+                        <option value="TK">TK/0 - Single</option>
+                        <option value="K1">K/1 - Married</option>
+                        <option value="K2">K/2 - Married + 1 Child</option>
+                        <option value="K3">K/3 - Married + 2 Children</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="deductions">Deductions (IDR)</label>
+                    <input type="number" id="deductions" name="deductions" placeholder="0" min="0" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="workMonth">Working Months in Year</label>
+                    <input type="number" id="workMonth" name="workMonth" placeholder="12" min="1" max="12" value="12">
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn-calculate">Calculate Tax</button>
+                <button type="reset" class="btn-reset">Reset</button>
+            </div>
+        </form>
+
+        <div class="results" id="results">
+            <div class="section-title">📊 Calculation Details</div>
+
+            <div class="result-item">
+                <span class="result-label">Gross Annual Income</span>
+                <span class="result-value" id="result-gross">IDR 0</span>
+            </div>
+
+            <div class="result-item">
+                <span class="result-label">Deductions</span>
+                <span class="result-value" id="result-deductions">IDR 0</span>
+            </div>
+
+            <div class="result-item">
+                <span class="result-label">PTKP (Non-taxable Income)</span>
+                <span class="result-value" id="result-ptkp">IDR 0</span>
+            </div>
+
+            <div class="result-section">
+                <div class="section-title">💵 Tax Calculation</div>
+
+                <div class="result-item">
+                    <span class="result-label">Taxable Income (PKP)</span>
+                    <span class="result-value" id="result-pkp">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Annual Income Tax</span>
+                    <span class="result-value" id="result-annual-tax">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Monthly Income Tax</span>
+                    <span class="result-value" id="result-monthly-tax">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Effective Tax Rate</span>
+                    <span class="result-value" id="result-tax-rate">0. 00%</span>
+                </div>
+            </div>
+
+            <div class="result-section">
+                <div class="section-title">✅ Take-Home Pay</div>
+
+                <div class="result-item">
+                    <span class="result-label">Annual Take-Home</span>
+                    <span class="result-value" id="result-take-home-annual">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Monthly Take-Home</span>
+                    <span class="result-value" id="result-take-home-monthly">IDR 0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
