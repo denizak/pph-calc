@@ -1,4 +1,4 @@
-<! DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -36,13 +36,13 @@
             font-size: 28px;
         }
 
-        . subtitle {
+        .subtitle {
             color: #666;
             margin-bottom: 30px;
             font-size: 14px;
         }
 
-        . form-group {
+        .form-group {
             margin-bottom: 24px;
         }
 
@@ -93,10 +93,10 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0. 3s;
+            transition: all 0.3s;
         }
 
-        . btn-calculate {
+        .btn-calculate {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
@@ -182,6 +182,14 @@
             display: block;
         }
 
+        .dynamic-fields {
+            display: none;
+        }
+
+        .dynamic-fields.show {
+            display: block;
+        }
+
         @media (max-width: 600px) {
             .form-row {
                 grid-template-columns: 1fr;
@@ -191,7 +199,7 @@
                 flex-direction: column;
             }
 
-            . container {
+            .container {
                 padding: 20px;
             }
 
@@ -211,8 +219,15 @@
         <form id="taxForm">
             <div class="form-row">
                 <div class="form-group">
-                    <label for="grossIncome">Gross Annual Income (IDR)</label>
-                    <input type="number" id="grossIncome" name="grossIncome" placeholder="0" min="0" required>
+                    <label for="taxType">Tax Type</label>
+                    <select id="taxType" name="taxType" required>
+                        <option value="pph21">PPh 21 - Employee Income Tax</option>
+                        <option value="pph22">PPh 22 - Service Recipient Tax</option>
+                        <option value="pph23">PPh 23 - Foreign Tax</option>
+                        <option value="pph42">PPh Final Pasal 4(2)</option>
+                        <option value="ppn">PPN - Value Added Tax</option>
+                        <option value="ppnbm">PPnBM - Luxury Goods Tax</option>
+                    </select>
                 </div>
                 <div class="form-group">
                     <label for="ptkpStatus">PTKP Status</label>
@@ -225,6 +240,138 @@
                 </div>
             </div>
 
+            <!-- PPh 21 Specific Fields -->
+            <div id="pph21-fields" class="dynamic-fields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="brutoMonthly">Bruto Monthly Income (IDR)</label>
+                        <input type="number" id="brutoMonthly" name="brutoMonthly" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="subjectType">Subject Type</label>
+                        <select id="subjectType" name="subjectType">
+                            <option value="0">Pegawai Tetap</option>
+                            <option value="1">Pensiunan</option>
+                            <option value="2">Pegawai Tidak Tetap</option>
+                            <option value="3">Bukan Pegawai</option>
+                            <option value="4">Peserta Kegiatan</option>
+                            <option value="5">Program Pensiun</option>
+                            <option value="6">Mantan Pegawai</option>
+                            <option value="7">WPLN</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="monthsPaid">Months Paid</label>
+                        <input type="number" id="monthsPaid" name="monthsPaid" placeholder="12" min="1" max="12" value="12">
+                    </div>
+                    <div class="form-group">
+                        <label for="pensionContribution">Pension Contribution (IDR)</label>
+                        <input type="number" id="pensionContribution" name="pensionContribution" placeholder="0" min="0" value="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="zakatDonation">Zakat/Sumbangan (IDR)</label>
+                        <input type="number" id="zakatDonation" name="zakatDonation" placeholder="0" min="0" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="scheme">Scheme</label>
+                        <select id="scheme" name="scheme">
+                            <option value="0">Lama</option>
+                            <option value="1">TER</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPh 22 Specific Fields -->
+            <div id="pph22-fields" class="dynamic-fields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dpp22">DPP (IDR)</label>
+                        <input type="number" id="dpp22" name="dpp22" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="rate22">Tax Rate (%)</label>
+                        <input type="number" id="rate22" name="rate22" placeholder="0" min="0" max="100" step="0.01" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPh 23 Specific Fields -->
+            <div id="pph23-fields" class="dynamic-fields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="bruto23">Bruto Income (IDR)</label>
+                        <input type="number" id="bruto23" name="bruto23" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="rate23">Tax Rate (%)</label>
+                        <input type="number" id="rate23" name="rate23" placeholder="0" min="0" max="100" step="0.01" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPh 4(2) Specific Fields -->
+            <div id="pph42-fields" class="dynamic-fields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="bruto42">Bruto Income (IDR)</label>
+                        <input type="number" id="bruto42" name="bruto42" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="rate42">Tax Rate (%)</label>
+                        <input type="number" id="rate42" name="rate42" placeholder="0" min="0" max="100" step="0.01" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPN Specific Fields -->
+            <div id="ppn-fields" class="dynamic-fields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dppPpn">DPP (IDR)</label>
+                        <input type="number" id="dppPpn" name="dppPpn" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ratePpn">PPN Rate (%)</label>
+                        <input type="number" id="ratePpn" name="ratePpn" placeholder="0" min="0" max="100" step="0.01" value="11" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ppnMode">PPN Mode</label>
+                        <select id="ppnMode" name="ppnMode">
+                            <option value="0">Exclusive</option>
+                            <option value="1">Inclusive</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPnBM Specific Fields -->
+            <div id="ppnbm-fields" class="dynamic-fields">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="dppPpnbm">DPP (IDR)</label>
+                        <input type="number" id="dppPpnbm" name="dppPpnbm" placeholder="0" min="0" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ratePpn">PPN Rate (%)</label>
+                        <input type="number" id="ratePpnPpnbm" name="ratePpnPpnbm" placeholder="0" min="0" max="100" step="0.01" value="11" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ratePpnbm">PPnBM Rate (%)</label>
+                        <input type="number" id="ratePpnbm" name="ratePpnbm" placeholder="0" min="0" max="100" step="0.01" required>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Common Fields -->
             <div class="form-row">
                 <div class="form-group">
                     <label for="deductions">Deductions (IDR)</label>
@@ -280,7 +427,7 @@
 
                 <div class="result-item">
                     <span class="result-label">Effective Tax Rate</span>
-                    <span class="result-value" id="result-tax-rate">0. 00%</span>
+                    <span class="result-value" id="result-tax-rate">0.00%</span>
                 </div>
             </div>
 
