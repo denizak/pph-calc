@@ -246,31 +246,107 @@
 
             <!-- PPh 21 Fields -->
             <div id="pph21-fields" style="display: none;">
+                <!-- Calculation Scheme -->
+                <div class="form-group">
+                    <label>Calculation Scheme</label>
+                    <div style="display: flex; gap: 20px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="pph21Scheme" value="traditional" checked
+                                style="margin-right: 8px; width: auto;">
+                            Traditional (Pasal 17)
+                        </label>
+                        <label style="display: flex; align-items: center; font-weight: normal; cursor: pointer;">
+                            <input type="radio" name="pph21Scheme" value="ter" style="margin-right: 8px; width: auto;">
+                            TER (Tarif Efektif Rata-rata)
+                        </label>
+                    </div>
+                </div>
+
+                <!-- TER Category (shown only when TER scheme is selected) -->
+                <div id="ter-category-field" class="form-group" style="display: none;">
+                    <label for="pph21TerCategory">TER Category</label>
+                    <select id="pph21TerCategory" name="pph21TerCategory">
+                        <option value="A">Category A (Lower rates)</option>
+                        <option value="B" selected>Category B (Standard rates)</option>
+                        <option value="C">Category C (Higher rates)</option>
+                    </select>
+                </div>
+
+                <!-- Basic Income Info -->
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="grossIncome">Gross Annual Income (IDR)</label>
-                        <input type="number" id="grossIncome" name="grossIncome" placeholder="0" min="0">
+                        <label for="pph21GrossMonthly">Gross Monthly Salary (IDR)</label>
+                        <input type="number" id="pph21GrossMonthly" name="pph21GrossMonthly" placeholder="10000000"
+                            min="0">
                     </div>
                     <div class="form-group">
-                        <label for="ptkpStatus">PTKP Status</label>
-                        <select id="ptkpStatus" name="ptkpStatus">
+                        <label for="pph21WorkMonths">Working Months</label>
+                        <input type="number" id="pph21WorkMonths" name="pph21WorkMonths" placeholder="12" min="1"
+                            max="12" value="12">
+                    </div>
+                </div>
+
+                <!-- PTKP Status and Pension -->
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="pph21PtkpStatus">PTKP Status</label>
+                        <select id="pph21PtkpStatus" name="pph21PtkpStatus">
                             <option value="TK">TK/0 - Single</option>
                             <option value="K1">K/1 - Married</option>
                             <option value="K2">K/2 - Married + 1 Child</option>
                             <option value="K3">K/3 - Married + 2 Children</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label for="pph21Pension">Pension Contribution (Monthly, IDR)</label>
+                        <input type="number" id="pph21Pension" name="pph21Pension" placeholder="0" min="0" value="0">
+                    </div>
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="deductions">Deductions (IDR)</label>
-                        <input type="number" id="deductions" name="deductions" placeholder="0" min="0" value="0">
+                <!-- Zakat/Donation -->
+                <div class="form-group">
+                    <label for="pph21Zakat">Zakat/Donation (Annual, IDR)</label>
+                    <input type="number" id="pph21Zakat" name="pph21Zakat" placeholder="0" min="0" value="0">
+                </div>
+
+                <!-- Bonus Management -->
+                <div style="background: #f8f9ff; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                    <h3 style="margin-bottom: 16px; font-size: 16px; color: #333;">Bonuses</h3>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="bonusName">Bonus Name</label>
+                            <input type="text" id="bonusName" placeholder="e.g., THR, Bonus Natal">
+                        </div>
+                        <div class="form-group">
+                            <label for="bonusAmount">Amount (IDR)</label>
+                            <input type="number" id="bonusAmount" placeholder="0" min="0">
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="workMonth">Working Months in Year</label>
-                        <input type="number" id="workMonth" name="workMonth" placeholder="12" min="1" max="12"
-                            value="12">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="bonusMonth">Payment Month (1-12)</label>
+                            <input type="number" id="bonusMonth" placeholder="6" min="1" max="12">
+                        </div>
+                        <div class="form-group" style="display: flex; align-items: flex-end;">
+                            <button type="button" onclick="addBonus()"
+                                style="width: 100%; padding: 12px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                                Add Bonus
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                            <strong style="font-size: 14px;">Added Bonuses</strong>
+                            <strong style="font-size: 14px;">Total: <span id="bonus-total">Rp 0</span></strong>
+                        </div>
+                        <div id="bonus-list"
+                            style="background: #e5e7eb; padding: 12px; border-radius: 6px; min-height: 60px;">
+                            <p style="color: #999; font-size: 14px;">No bonuses added yet</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -375,32 +451,71 @@
         <div class="results" id="results">
             <!-- PPh 21 Results -->
             <div id="pph21-results" style="display: none;">
-                <div class="section-title">📊 PPh 21 Calculation Details</div>
+                <div class="section-title">📊 PPh 21 - Income Breakdown</div>
 
                 <div class="result-item">
+                    <span class="result-label">Gross Monthly Salary</span>
+                    <span class="result-value" id="result-gross-monthly">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Working Months</span>
+                    <span class="result-value" id="result-work-months">0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Annual Salary</span>
+                    <span class="result-value" id="result-gross-salary">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Total Bonuses</span>
+                    <span class="result-value" id="result-bonus-total">IDR 0</span>
+                </div>
+
+                <div class="result-item" style="font-weight: 700;">
                     <span class="result-label">Gross Annual Income</span>
-                    <span class="result-value" id="result-gross">IDR 0</span>
+                    <span class="result-value" id="result-gross-annual">IDR 0</span>
                 </div>
 
-                <div class="result-item">
-                    <span class="result-label">Deductions</span>
-                    <span class="result-value" id="result-deductions">IDR 0</span>
-                </div>
+                <div class="result-section">
+                    <div class="section-title">➖ Deductions</div>
 
-                <div class="result-item">
-                    <span class="result-label">PTKP (Non-taxable Income)</span>
-                    <span class="result-value" id="result-ptkp">IDR 0</span>
+                    <div class="result-item">
+                        <span class="result-label">Biaya Jabatan (5%, max 6M)</span>
+                        <span class="result-value" id="result-biaya-jabatan">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Pension Contribution (Annual)</span>
+                        <span class="result-value" id="result-pension">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Zakat/Donation</span>
+                        <span class="result-value" id="result-zakat">IDR 0</span>
+                    </div>
+
+                    <div class="result-item" style="font-weight: 700;">
+                        <span class="result-label">Netto Annual</span>
+                        <span class="result-value" id="result-netto">IDR 0</span>
+                    </div>
                 </div>
 
                 <div class="result-section">
                     <div class="section-title">💵 Tax Calculation</div>
 
                     <div class="result-item">
-                        <span class="result-label">Taxable Income (PKP)</span>
-                        <span class="result-value" id="result-pkp">IDR 0</span>
+                        <span class="result-label">PTKP (Non-taxable Income)</span>
+                        <span class="result-value" id="result-ptkp">IDR 0</span>
                     </div>
 
                     <div class="result-item">
+                        <span class="result-label">PKP (Taxable Income)</span>
+                        <span class="result-value" id="result-pkp">IDR 0</span>
+                    </div>
+
+                    <div class="result-item" style="font-weight: 700;">
                         <span class="result-label">Annual Income Tax</span>
                         <span class="result-value" id="result-annual-tax">IDR 0</span>
                     </div>
@@ -413,6 +528,26 @@
                     <div class="result-item">
                         <span class="result-label">Effective Tax Rate</span>
                         <span class="result-value" id="result-tax-rate">0.00%</span>
+                    </div>
+                </div>
+
+                <!-- TER Breakdown (shown only for TER scheme) -->
+                <div id="ter-breakdown" class="result-section" style="display: none;">
+                    <div class="section-title">📅 TER Monthly Withholding (Months 1-11)</div>
+
+                    <div id="ter-month-list"
+                        style="background: white; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+                        <!-- Populated dynamically -->
+                    </div>
+
+                    <div class="result-item" style="font-weight: 700;">
+                        <span class="result-label">Total TER Withheld (Months 1-11)</span>
+                        <span class="result-value" id="result-ter-paid">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Month 12 Adjustment</span>
+                        <span class="result-value" id="result-month12-adjustment">IDR 0</span>
                     </div>
                 </div>
 

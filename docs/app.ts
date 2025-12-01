@@ -10,15 +10,63 @@ enum TaxType {
     PPNBM = 'ppnbm'
 }
 
+// PPh 21 Enums
+enum PPh21Scheme {
+    TRADITIONAL = 'traditional',
+    TER = 'ter'
+}
+
+enum PPh21TERCategory {
+    A = 'A',
+    B = 'B',
+    C = 'C'
+}
+
 // PPh 21 Types
-interface PPH21Result {
-    grossIncome: number;
-    deductions: number;
+interface PPh21Bonus {
+    name: string;
+    amount: number;
+    month: number; // 1-12
+}
+
+interface PPh21DetailedResult {
+    grossMonthly: number;
+    grossAnnual: number;
+    bonusTotal: number;
+    bonuses: PPh21Bonus[];
+    workMonths: number;
+
+    // Deductions
+    biayaJabatan: number;
+    pensionAnnual: number;
+    zakatDonation: number;
+    totalDeductions: number;
+
+    // PTKP and PKP
+    nettoAnnual: number;
     ptkp: number;
-    taxableIncome: number;
+    pkp: number;
+
+    // Tax calculation
+    scheme: PPh21Scheme;
+    terCategory?: PPh21TERCategory;
     annualTax: number;
     monthlyTax: number;
     effectiveTaxRate: number;
+
+    // TER specific
+    terPaid?: number;
+    month12Adjustment?: number;
+    monthlyBreakdown?: {
+        month: number;
+        income: number;
+        terRate: number;
+        tax: number;
+        hasBonus: boolean;
+        bonusNames?: string;
+    }[];
+
+    // Take-home
     takeHomeAnnual: number;
     takeHomeMonthly: number;
 }
@@ -94,6 +142,29 @@ const TAX_BRACKETS: TaxBracket[] = [
     { limit: Infinity, rate: 0.35 },        // 35%
 ];
 
+// TER (Tarif Efektif Rata-rata) Rate Tables
+// Simplified TER rates based on monthly gross income
+// These are approximations - the real tables are more detailed
+interface TERBracket {
+    minIncome: number;
+    maxIncome: number;
+    rateA: number; // Category A
+    rateB: number; // Category B
+    rateC: number; // Category C
+}
+
+const TER_MONTHLY_RATES: TERBracket[] = [
+    { minIncome: 0, maxIncome: 5_000_000, rateA: 0.0000, rateB: 0.0000, rateC: 0.0000 },
+    { minIncome: 5_000_001, maxIncome: 6_000_000, rateA: 0.0025, rateB: 0.0050, rateC: 0.0075 },
+    { minIncome: 6_000_001, maxIncome: 7_000_000, rateA: 0.0050, rateB: 0.0075, rateC: 0.0100 },
+    { minIncome: 7_000_001, maxIncome: 8_000_000, rateA: 0.0075, rateB: 0.0100, rateC: 0.0125 },
+    { minIncome: 8_000_001, maxIncome: 10_000_000, rateA: 0.0100, rateB: 0.0150, rateC: 0.0200 },
+    { minIncome: 10_000_001, maxIncome: 15_000_000, rateA: 0.0200, rateB: 0.0300, rateC: 0.0400 },
+    { minIncome: 15_000_001, maxIncome: 25_000_000, rateA: 0.0400, rateB: 0.0600, rateC: 0.0800 },
+    { minIncome: 25_000_001, maxIncome: 50_000_000, rateA: 0.0800, rateB: 0.1200, rateC: 0.1600 },
+    { minIncome: 50_000_001, maxIncome: Infinity, rateA: 0.1500, rateB: 0.2000, rateC: 0.2500 },
+];
+
 class PPH21Calculator {
     /**
      * Get PTKP (Non-taxable income) amount based on status
@@ -129,39 +200,164 @@ class PPH21Calculator {
     }
 
     /**
-     * Calculate annual PPH 21
+     * Get TER rate for monthly income and category
+     */
+    getTERRate(monthlyIncome: number, category: PPh21TERCategory): number {
+        for (const bracket of TER_MONTHLY_RATES) {
+            if (monthlyIncome >= bracket.minIncome && monthlyIncome <= bracket.maxIncome) {
+                switch (category) {
+                    case PPh21TERCategory.A:
+                        return bracket.rateA;
+                    case PPh21TERCategory.B:
+                        return bracket.rateB;
+                    case PPh21TERCategory.C:
+                        return bracket.rateC;
+                }
+            }
+        }
+        // Default to highest rate if not found
+        return category === PPh21TERCategory.A ? 0.15 : category === PPh21TERCategory.B ? 0.20 : 0.25;
+    }
+
+    /**
+     * Calculate biaya jabatan (position allowance): 5% of gross, max 6 million
+     */
+    calculateBiayaJabatan(grossAnnual: number): number {
+        const biaya = grossAnnual * 0.05;
+        return Math.min(biaya, 6_000_000);
+    }
+
+    /**
+     * Round down to nearest thousand
+     */
+    roundDownThousand(value: number): number {
+        return Math.floor(value / 1000) * 1000;
+    }
+
+    /**
+     * Calculate PPh 21 with full details
      */
     calculate(
-        grossIncome: number,
+        grossMonthly: number,
         ptkpStatus: string,
-        deductions: number = 0,
-        workMonths: number = 12
-    ): PPH21Result {
-        // Calculate PTKP for the working period
-        const ptkp = (this.getPTKP(ptkpStatus) / 12) * workMonths;
+        workMonths: number = 12,
+        scheme: PPh21Scheme = PPh21Scheme.TRADITIONAL,
+        terCategory: PPh21TERCategory = PPh21TERCategory.B,
+        pensionMonthly: number = 0,
+        zakatAnnual: number = 0,
+        bonuses: PPh21Bonus[] = []
+    ): PPh21DetailedResult {
+        // Clamp work months
+        workMonths = Math.max(1, Math.min(12, workMonths));
 
-        // Calculate PKP (Penghasilan Kena Pajak)
-        const taxableIncome = Math.max(0, grossIncome - deductions - ptkp);
+        // Calculate gross annual from salary
+        const grossFromSalary = grossMonthly * workMonths;
 
-        // Calculate annual tax
-        const annualTax = this.calculateProgressiveTax(taxableIncome);
+        // Calculate total bonuses
+        const bonusTotal = bonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
+        const grossAnnual = grossFromSalary + bonusTotal;
 
-        // Calculate monthly values
+        // Calculate annual pension contributions
+        const pensionAnnual = pensionMonthly * workMonths;
+
+        // Calculate deductions
+        const biayaJabatan = this.calculateBiayaJabatan(grossAnnual);
+        const totalDeductions = biayaJabatan + pensionAnnual + zakatAnnual;
+
+        // Calculate netto
+        const nettoAnnual = grossAnnual - totalDeductions;
+
+        // Get PTKP
+        const ptkp = this.getPTKP(ptkpStatus);
+
+        // Calculate PKP (rounded down to thousand)
+        const pkp = this.roundDownThousand(Math.max(0, nettoAnnual - ptkp));
+
+        let annualTax: number;
+        let terPaid: number | undefined;
+        let month12Adjustment: number | undefined;
+        let monthlyBreakdown: PPh21DetailedResult['monthlyBreakdown'] | undefined;
+
+        if (scheme === PPh21Scheme.TER) {
+            // TER Scheme: Month-by-month calculation
+            monthlyBreakdown = [];
+            terPaid = 0;
+
+            // Initialize monthly income array
+            const monthlyIncome: number[] = new Array(12).fill(0);
+            for (let i = 0; i < workMonths; i++) {
+                monthlyIncome[i] = grossMonthly;
+            }
+
+            // Add bonuses to appropriate months
+            for (const bonus of bonuses) {
+                const monthIndex = bonus.month - 1; // Convert to 0-indexed
+                if (monthIndex >= 0 && monthIndex < 12 && monthIndex < workMonths) {
+                    monthlyIncome[monthIndex] += bonus.amount;
+                }
+            }
+
+            // Calculate TER for months 1-11 only
+            for (let i = 0; i < 11 && i < workMonths; i++) {
+                const income = monthlyIncome[i];
+                const terRate = this.getTERRate(income, terCategory);
+                const monthTax = income * terRate;
+
+                // Check if this month has bonuses
+                const monthBonuses = bonuses.filter(b => b.month === i + 1);
+                const hasBonus = monthBonuses.length > 0;
+                const bonusNames = monthBonuses.map(b => b.name).join(', ');
+
+                monthlyBreakdown.push({
+                    month: i + 1,
+                    income,
+                    terRate,
+                    tax: monthTax,
+                    hasBonus,
+                    bonusNames: hasBonus ? bonusNames : undefined
+                });
+
+                terPaid += monthTax;
+            }
+
+            // Calculate annual progressive tax
+            annualTax = this.calculateProgressiveTax(pkp);
+
+            // Month 12 adjustment
+            month12Adjustment = annualTax - terPaid;
+
+        } else {
+            // Traditional Scheme: Simple annual progressive tax
+            annualTax = this.calculateProgressiveTax(pkp);
+        }
+
+        // Calculate monthly tax and take-home
         const monthlyTax = annualTax / 12;
-        const effectiveTaxRate = grossIncome > 0 ? (annualTax / grossIncome) * 100 : 0;
-
-        // Calculate take-home pay
-        const takeHomeAnnual = grossIncome - annualTax;
+        const effectiveTaxRate = grossAnnual > 0 ? (annualTax / grossAnnual) * 100 : 0;
+        const takeHomeAnnual = grossAnnual - annualTax;
         const takeHomeMonthly = takeHomeAnnual / 12;
 
         return {
-            grossIncome,
-            deductions,
+            grossMonthly,
+            grossAnnual,
+            bonusTotal,
+            bonuses,
+            workMonths,
+            biayaJabatan,
+            pensionAnnual,
+            zakatDonation: zakatAnnual,
+            totalDeductions,
+            nettoAnnual,
             ptkp,
-            taxableIncome,
+            pkp,
+            scheme,
+            terCategory: scheme === PPh21Scheme.TER ? terCategory : undefined,
             annualTax,
             monthlyTax,
             effectiveTaxRate,
+            terPaid,
+            month12Adjustment,
+            monthlyBreakdown,
             takeHomeAnnual,
             takeHomeMonthly,
         };
@@ -321,6 +517,9 @@ const pph42Results = document.getElementById('pph42-results') as HTMLDivElement;
 const ppnResults = document.getElementById('ppn-results') as HTMLDivElement;
 const ppnbmResults = document.getElementById('ppnbm-results') as HTMLDivElement;
 
+// Bonus management
+let bonusList: PPh21Bonus[] = [];
+
 /**
  * Show/hide form fields based on selected tax type
  */
@@ -336,6 +535,7 @@ function updateFormFields(): void {
     switch (selectedType) {
         case TaxType.PPH21:
             pph21Fields.style.display = 'block';
+            updateSchemeFields();
             break;
         case TaxType.PPH22:
             pph22Fields.style.display = 'block';
@@ -360,6 +560,92 @@ function updateFormFields(): void {
 }
 
 /**
+ * Show/hide TER category field based on scheme selection
+ */
+function updateSchemeFields(): void {
+    const schemeRadios = Array.from(document.getElementsByName('pph21Scheme') as NodeListOf<HTMLInputElement>);
+    let selectedScheme = PPh21Scheme.TRADITIONAL;
+
+    for (const radio of schemeRadios) {
+        if (radio.checked) {
+            selectedScheme = radio.value as PPh21Scheme;
+            break;
+        }
+    }
+
+    const terCategoryField = document.getElementById('ter-category-field') as HTMLDivElement;
+    if (selectedScheme === PPh21Scheme.TER) {
+        terCategoryField.style.display = 'block';
+    } else {
+        terCategoryField.style.display = 'none';
+    }
+}
+
+/**
+ * Add bonus to list
+ */
+function addBonus(): void {
+    const bonusNameInput = document.getElementById('bonusName') as HTMLInputElement;
+    const bonusAmountInput = document.getElementById('bonusAmount') as HTMLInputElement;
+    const bonusMonthInput = document.getElementById('bonusMonth') as HTMLInputElement;
+
+    const name = bonusNameInput.value.trim();
+    const amount = parseFloat(bonusAmountInput.value);
+    const month = parseInt(bonusMonthInput.value);
+
+    if (!name || isNaN(amount) || amount <= 0 || isNaN(month) || month < 1 || month > 12) {
+        showError('Please enter valid bonus details');
+        return;
+    }
+
+    bonusList.push({ name, amount, month });
+    updateBonusList();
+
+    // Clear inputs
+    bonusNameInput.value = '';
+    bonusAmountInput.value = '';
+    bonusMonthInput.value = '';
+}
+
+/**
+ * Remove bonus from list
+ */
+function removeBonus(index: number): void {
+    bonusList.splice(index, 1);
+    updateBonusList();
+}
+
+/**
+ * Update bonus list display
+ */
+function updateBonusList(): void {
+    const bonusListDiv = document.getElementById('bonus-list') as HTMLDivElement;
+    const bonusTotalDiv = document.getElementById('bonus-total') as HTMLSpanElement;
+
+    if (bonusList.length === 0) {
+        bonusListDiv.innerHTML = '<p style="color: #999; font-size: 14px;">No bonuses added yet</p>';
+        bonusTotalDiv.textContent = formatCurrency(0);
+        return;
+    }
+
+    const total = bonusList.reduce((sum, bonus) => sum + bonus.amount, 0);
+    bonusTotalDiv.textContent = formatCurrency(total);
+
+    bonusListDiv.innerHTML = bonusList.map((bonus, index) => `
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: white; border-radius: 4px; margin-bottom: 8px;">
+            <div>
+                <strong>${bonus.name}</strong><br>
+                <small>Month ${bonus.month}: ${formatCurrency(bonus.amount)}</small>
+            </div>
+            <button type="button" onclick="removeBonus(${index})" style="padding: 4px 12px; background: #dc2626; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Remove</button>
+        </div>
+    `).join('');
+}
+
+// Make removeBonus available globally
+(window as any).removeBonus = removeBonus;
+
+/**
  * Display error message
  */
 function showError(message: string): void {
@@ -378,7 +664,7 @@ function clearError(): void {
 /**
  * Display PPh 21 results
  */
-function displayPPH21Results(result: PPH21Result): void {
+function displayPPH21Results(result: PPh21DetailedResult): void {
     // Hide all result containers
     [pph21Results, pph22Results, pph23Results, pph42Results, ppnResults, ppnbmResults].forEach(el => {
         el.style.display = 'none';
@@ -387,15 +673,52 @@ function displayPPH21Results(result: PPH21Result): void {
     // Show PPh 21 results
     pph21Results.style.display = 'block';
 
-    document.getElementById('result-gross')!.textContent = formatCurrency(result.grossIncome);
-    document.getElementById('result-deductions')!.textContent = formatCurrency(result.deductions);
+    // Basic info
+    document.getElementById('result-gross-monthly')!.textContent = formatCurrency(result.grossMonthly);
+    document.getElementById('result-work-months')!.textContent = result.workMonths.toString();
+    document.getElementById('result-gross-salary')!.textContent = formatCurrency(result.grossMonthly * result.workMonths);
+    document.getElementById('result-bonus-total')!.textContent = formatCurrency(result.bonusTotal);
+    document.getElementById('result-gross-annual')!.textContent = formatCurrency(result.grossAnnual);
+
+    // Deductions
+    document.getElementById('result-biaya-jabatan')!.textContent = formatCurrency(result.biayaJabatan);
+    document.getElementById('result-pension')!.textContent = formatCurrency(result.pensionAnnual);
+    document.getElementById('result-zakat')!.textContent = formatCurrency(result.zakatDonation);
+    document.getElementById('result-netto')!.textContent = formatCurrency(result.nettoAnnual);
+
+    // PKP and Tax
     document.getElementById('result-ptkp')!.textContent = formatCurrency(result.ptkp);
-    document.getElementById('result-pkp')!.textContent = formatCurrency(result.taxableIncome);
+    document.getElementById('result-pkp')!.textContent = formatCurrency(result.pkp);
     document.getElementById('result-annual-tax')!.textContent = formatCurrency(result.annualTax);
     document.getElementById('result-monthly-tax')!.textContent = formatCurrency(result.monthlyTax);
     document.getElementById('result-tax-rate')!.textContent = formatPercent(result.effectiveTaxRate);
+
+    // Take-home
     document.getElementById('result-take-home-annual')!.textContent = formatCurrency(result.takeHomeAnnual);
     document.getElementById('result-take-home-monthly')!.textContent = formatCurrency(result.takeHomeMonthly);
+
+    // TER specific results
+    const terBreakdownDiv = document.getElementById('ter-breakdown') as HTMLDivElement;
+    if (result.scheme === PPh21Scheme.TER && result.monthlyBreakdown) {
+        terBreakdownDiv.style.display = 'block';
+
+        const terListDiv = document.getElementById('ter-month-list') as HTMLDivElement;
+        terListDiv.innerHTML = result.monthlyBreakdown.map(m => `
+            <div style="padding: 8px; background: white; border-radius: 4px; margin-bottom: 8px;">
+                <strong>Month ${m.month}${m.hasBonus ? ' (' + m.bonusNames + ')' : ''}</strong><br>
+                <small>
+                    Income: ${formatCurrency(m.income)} | 
+                    TER Rate: ${formatPercent(m.terRate * 100)} | 
+                    Tax: ${formatCurrency(m.tax)}
+                </small>
+            </div>
+        `).join('');
+
+        document.getElementById('result-ter-paid')!.textContent = formatCurrency(result.terPaid || 0);
+        document.getElementById('result-month12-adjustment')!.textContent = formatCurrency(result.month12Adjustment || 0);
+    } else {
+        terBreakdownDiv.style.display = 'none';
+    }
 
     resultsDiv.classList.add('show');
 }
@@ -502,17 +825,39 @@ form.addEventListener('submit', (e: Event) => {
     try {
         switch (selectedType) {
             case TaxType.PPH21: {
-                const grossIncome = parseFloat((document.getElementById('grossIncome') as HTMLInputElement).value);
-                const ptkpStatus = (document.getElementById('ptkpStatus') as HTMLSelectElement).value;
-                const deductions = parseFloat((document.getElementById('deductions') as HTMLInputElement).value) || 0;
-                const workMonths = parseInt((document.getElementById('workMonth') as HTMLInputElement).value) || 12;
+                const grossMonthly = parseFloat((document.getElementById('pph21GrossMonthly') as HTMLInputElement).value);
+                const ptkpStatus = (document.getElementById('pph21PtkpStatus') as HTMLSelectElement).value;
+                const workMonths = parseInt((document.getElementById('pph21WorkMonths') as HTMLInputElement).value) || 12;
+                const pensionMonthly = parseFloat((document.getElementById('pph21Pension') as HTMLInputElement).value) || 0;
+                const zakatAnnual = parseFloat((document.getElementById('pph21Zakat') as HTMLInputElement).value) || 0;
 
-                if (isNaN(grossIncome) || grossIncome <= 0) {
-                    showError('Please enter a valid gross income');
+                // Get scheme
+                const schemeRadios = Array.from(document.getElementsByName('pph21Scheme') as NodeListOf<HTMLInputElement>);
+                let scheme = PPh21Scheme.TRADITIONAL;
+                for (const radio of schemeRadios) {
+                    if (radio.checked) {
+                        scheme = radio.value as PPh21Scheme;
+                        break;
+                    }
+                }
+
+                const terCategory = (document.getElementById('pph21TerCategory') as HTMLSelectElement).value as PPh21TERCategory;
+
+                if (isNaN(grossMonthly) || grossMonthly <= 0) {
+                    showError('Please enter a valid gross monthly income');
                     return;
                 }
 
-                const result = pph21Calculator.calculate(grossIncome, ptkpStatus, deductions, workMonths);
+                const result = pph21Calculator.calculate(
+                    grossMonthly,
+                    ptkpStatus,
+                    workMonths,
+                    scheme,
+                    terCategory,
+                    pensionMonthly,
+                    zakatAnnual,
+                    bonusList
+                );
                 displayPPH21Results(result);
                 break;
             }
@@ -623,10 +968,19 @@ form.addEventListener('submit', (e: Event) => {
 form.addEventListener('reset', () => {
     clearError();
     resultsDiv.classList.remove('show');
+    bonusList = [];
+    updateBonusList();
 });
 
 // Handle tax type change
 taxTypeSelect.addEventListener('change', updateFormFields);
 
+// Handle scheme change
+const schemeRadios = document.getElementsByName('pph21Scheme') as NodeListOf<HTMLInputElement>;
+schemeRadios.forEach(radio => {
+    radio.addEventListener('change', updateSchemeFields);
+});
+
 // Initialize form fields on page load
 updateFormFields();
+updateBonusList();
