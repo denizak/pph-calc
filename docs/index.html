@@ -1,5 +1,6 @@
-<! DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -36,13 +37,13 @@
             font-size: 28px;
         }
 
-        . subtitle {
+        .subtitle {
             color: #666;
             margin-bottom: 30px;
             font-size: 14px;
         }
 
-        . form-group {
+        .form-group {
             margin-bottom: 24px;
         }
 
@@ -93,10 +94,10 @@
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0. 3s;
+            transition: all 0.3s;
         }
 
-        . btn-calculate {
+        .btn-calculate {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
         }
@@ -182,6 +183,24 @@
             display: block;
         }
 
+        .tax-type-selector {
+            background: #f8f9ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+
+        .tax-type-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #667eea;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
         @media (max-width: 600px) {
             .form-row {
                 grid-template-columns: 1fr;
@@ -191,7 +210,7 @@
                 flex-direction: column;
             }
 
-            . container {
+            .container {
                 padding: 20px;
             }
 
@@ -201,38 +220,149 @@
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>💰 PPH Calculator</h1>
-        <p class="subtitle">Indonesian Income Tax (Pajak Penghasilan) Calculator</p>
+        <p class="subtitle">Indonesian Tax Calculator - Multiple Tax Types</p>
 
         <div class="error" id="error"></div>
 
-        <form id="taxForm">
-            <div class="form-row">
+        <form id="taxForm" novalidate>
+            <!-- Tax Type Selector -->
+            <div class="tax-type-selector">
                 <div class="form-group">
-                    <label for="grossIncome">Gross Annual Income (IDR)</label>
-                    <input type="number" id="grossIncome" name="grossIncome" placeholder="0" min="0" required>
-                </div>
-                <div class="form-group">
-                    <label for="ptkpStatus">PTKP Status</label>
-                    <select id="ptkpStatus" name="ptkpStatus" required>
-                        <option value="TK">TK/0 - Single</option>
-                        <option value="K1">K/1 - Married</option>
-                        <option value="K2">K/2 - Married + 1 Child</option>
-                        <option value="K3">K/3 - Married + 2 Children</option>
+                    <label for="taxType">Select Tax Type</label>
+                    <select id="taxType" name="taxType" required>
+                        <option value="pph21">PPh 21 - Income Tax Article 21</option>
+                        <option value="pph22">PPh 22 - Import/Export Withholding Tax</option>
+                        <option value="pph23">PPh 23 - Service Withholding Tax</option>
+                        <option value="pph4_2">PPh Final Pasal 4(2) - Final Income Tax</option>
+                        <option value="ppn">PPN - Value Added Tax</option>
+                        <option value="ppnbm">PPNBM - Luxury Goods Sales Tax</option>
                     </select>
                 </div>
             </div>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="deductions">Deductions (IDR)</label>
-                    <input type="number" id="deductions" name="deductions" placeholder="0" min="0" value="0">
+            <!-- PPh 21 Fields -->
+            <div id="pph21-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="grossIncome">Gross Annual Income (IDR)</label>
+                        <input type="number" id="grossIncome" name="grossIncome" placeholder="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="ptkpStatus">PTKP Status</label>
+                        <select id="ptkpStatus" name="ptkpStatus">
+                            <option value="TK">TK/0 - Single</option>
+                            <option value="K1">K/1 - Married</option>
+                            <option value="K2">K/2 - Married + 1 Child</option>
+                            <option value="K3">K/3 - Married + 2 Children</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="deductions">Deductions (IDR)</label>
+                        <input type="number" id="deductions" name="deductions" placeholder="0" min="0" value="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="workMonth">Working Months in Year</label>
+                        <input type="number" id="workMonth" name="workMonth" placeholder="12" min="1" max="12"
+                            value="12">
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPh 22 Fields -->
+            <div id="pph22-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="pph22Dpp">DPP - Tax Base (IDR)</label>
+                        <input type="number" id="pph22Dpp" name="pph22Dpp" placeholder="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="pph22Rate">Tax Rate (%)</label>
+                        <input type="number" id="pph22Rate" name="pph22Rate" placeholder="1.5" min="0" step="0.01"
+                            value="1.5">
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPh 23 Fields -->
+            <div id="pph23-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="pph23Gross">Gross Income (IDR)</label>
+                        <input type="number" id="pph23Gross" name="pph23Gross" placeholder="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="pph23Rate">Tax Rate (%)</label>
+                        <input type="number" id="pph23Rate" name="pph23Rate" placeholder="2" min="0" step="0.01"
+                            value="2">
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPh 4(2) Fields -->
+            <div id="pph42-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="pph42Gross">Gross Income (IDR)</label>
+                        <input type="number" id="pph42Gross" name="pph42Gross" placeholder="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="pph42Rate">Tax Rate (%)</label>
+                        <input type="number" id="pph42Rate" name="pph42Rate" placeholder="0.5" min="0" step="0.01"
+                            value="0.5">
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPN Fields -->
+            <div id="ppn-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ppnAmount">Amount (IDR)</label>
+                        <input type="number" id="ppnAmount" name="ppnAmount" placeholder="0" min="0">
+                        <small style="color: #666; font-size: 12px;">For Exclusive: Enter DPP. For Inclusive: Enter
+                            Total with Tax</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="ppnRate">PPN Rate (%)</label>
+                        <input type="number" id="ppnRate" name="ppnRate" placeholder="11" min="0" step="0.01"
+                            value="11">
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label for="workMonth">Working Months in Year</label>
-                    <input type="number" id="workMonth" name="workMonth" placeholder="12" min="1" max="12" value="12">
+                    <label for="ppnMode">Calculation Mode</label>
+                    <select id="ppnMode" name="ppnMode">
+                        <option value="exclusive">Exclusive (Add PPN to amount)</option>
+                        <option value="inclusive">Inclusive (Extract PPN from total)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- PPNBM Fields -->
+            <div id="ppnbm-fields" style="display: none;">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ppnbmDpp">DPP - Tax Base (IDR)</label>
+                        <input type="number" id="ppnbmDpp" name="ppnbmDpp" placeholder="0" min="0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="ppnbmPpnRate">PPN Rate (%)</label>
+                        <input type="number" id="ppnbmPpnRate" name="ppnbmPpnRate" placeholder="11" min="0" step="0.01"
+                            value="11">
+                    </div>
+                    <div class="form-group">
+                        <label for="ppnbmPpnbmRate">PPNBM Rate (%)</label>
+                        <input type="number" id="ppnbmPpnbmRate" name="ppnbmPpnbmRate" placeholder="20" min="0"
+                            step="0.01" value="20">
+                    </div>
                 </div>
             </div>
 
@@ -243,58 +373,206 @@
         </form>
 
         <div class="results" id="results">
-            <div class="section-title">📊 Calculation Details</div>
+            <!-- PPh 21 Results -->
+            <div id="pph21-results" style="display: none;">
+                <div class="section-title">📊 PPh 21 Calculation Details</div>
 
-            <div class="result-item">
-                <span class="result-label">Gross Annual Income</span>
-                <span class="result-value" id="result-gross">IDR 0</span>
+                <div class="result-item">
+                    <span class="result-label">Gross Annual Income</span>
+                    <span class="result-value" id="result-gross">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Deductions</span>
+                    <span class="result-value" id="result-deductions">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">PTKP (Non-taxable Income)</span>
+                    <span class="result-value" id="result-ptkp">IDR 0</span>
+                </div>
+
+                <div class="result-section">
+                    <div class="section-title">💵 Tax Calculation</div>
+
+                    <div class="result-item">
+                        <span class="result-label">Taxable Income (PKP)</span>
+                        <span class="result-value" id="result-pkp">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Annual Income Tax</span>
+                        <span class="result-value" id="result-annual-tax">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Monthly Income Tax</span>
+                        <span class="result-value" id="result-monthly-tax">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Effective Tax Rate</span>
+                        <span class="result-value" id="result-tax-rate">0.00%</span>
+                    </div>
+                </div>
+
+                <div class="result-section">
+                    <div class="section-title">✅ Take-Home Pay</div>
+
+                    <div class="result-item">
+                        <span class="result-label">Annual Take-Home</span>
+                        <span class="result-value" id="result-take-home-annual">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Monthly Take-Home</span>
+                        <span class="result-value" id="result-take-home-monthly">IDR 0</span>
+                    </div>
+                </div>
             </div>
 
-            <div class="result-item">
-                <span class="result-label">Deductions</span>
-                <span class="result-value" id="result-deductions">IDR 0</span>
-            </div>
-
-            <div class="result-item">
-                <span class="result-label">PTKP (Non-taxable Income)</span>
-                <span class="result-value" id="result-ptkp">IDR 0</span>
-            </div>
-
-            <div class="result-section">
-                <div class="section-title">💵 Tax Calculation</div>
+            <!-- PPh 22 Results -->
+            <div id="pph22-results" style="display: none;">
+                <div class="section-title">📊 PPh 22 Calculation</div>
 
                 <div class="result-item">
-                    <span class="result-label">Taxable Income (PKP)</span>
-                    <span class="result-value" id="result-pkp">IDR 0</span>
+                    <span class="result-label">DPP (Tax Base)</span>
+                    <span class="result-value" id="result-pph22-dpp">IDR 0</span>
                 </div>
 
                 <div class="result-item">
-                    <span class="result-label">Annual Income Tax</span>
-                    <span class="result-value" id="result-annual-tax">IDR 0</span>
+                    <span class="result-label">Tax Rate</span>
+                    <span class="result-value" id="result-pph22-rate">0.00%</span>
                 </div>
 
-                <div class="result-item">
-                    <span class="result-label">Monthly Income Tax</span>
-                    <span class="result-value" id="result-monthly-tax">IDR 0</span>
-                </div>
+                <div class="result-section">
+                    <div class="section-title">💵 Tax Amount</div>
 
-                <div class="result-item">
-                    <span class="result-label">Effective Tax Rate</span>
-                    <span class="result-value" id="result-tax-rate">0. 00%</span>
+                    <div class="result-item">
+                        <span class="result-label">PPh 22 Withholding Tax</span>
+                        <span class="result-value" id="result-pph22-tax">IDR 0</span>
+                    </div>
                 </div>
             </div>
 
-            <div class="result-section">
-                <div class="section-title">✅ Take-Home Pay</div>
+            <!-- PPh 23 Results -->
+            <div id="pph23-results" style="display: none;">
+                <div class="section-title">📊 PPh 23 Calculation</div>
 
                 <div class="result-item">
-                    <span class="result-label">Annual Take-Home</span>
-                    <span class="result-value" id="result-take-home-annual">IDR 0</span>
+                    <span class="result-label">Gross Income</span>
+                    <span class="result-value" id="result-pph23-gross">IDR 0</span>
                 </div>
 
                 <div class="result-item">
-                    <span class="result-label">Monthly Take-Home</span>
-                    <span class="result-value" id="result-take-home-monthly">IDR 0</span>
+                    <span class="result-label">Tax Rate</span>
+                    <span class="result-value" id="result-pph23-rate">0.00%</span>
+                </div>
+
+                <div class="result-section">
+                    <div class="section-title">💵 Tax Amount</div>
+
+                    <div class="result-item">
+                        <span class="result-label">PPh 23 Withholding Tax</span>
+                        <span class="result-value" id="result-pph23-tax">IDR 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPh 4(2) Results -->
+            <div id="pph42-results" style="display: none;">
+                <div class="section-title">📊 PPh Final Pasal 4(2) Calculation</div>
+
+                <div class="result-item">
+                    <span class="result-label">Gross Income</span>
+                    <span class="result-value" id="result-pph42-gross">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">Tax Rate</span>
+                    <span class="result-value" id="result-pph42-rate">0.00%</span>
+                </div>
+
+                <div class="result-section">
+                    <div class="section-title">💵 Tax Amount</div>
+
+                    <div class="result-item">
+                        <span class="result-label">PPh Final Pasal 4(2)</span>
+                        <span class="result-value" id="result-pph42-tax">IDR 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPN Results -->
+            <div id="ppn-results" style="display: none;">
+                <div class="section-title">📊 PPN Calculation</div>
+
+                <div class="result-item">
+                    <span class="result-label">Calculation Mode</span>
+                    <span class="result-value" id="result-ppn-mode">Exclusive</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">DPP (Tax Base)</span>
+                    <span class="result-value" id="result-ppn-dpp">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">PPN Rate</span>
+                    <span class="result-value" id="result-ppn-rate">0.00%</span>
+                </div>
+
+                <div class="result-section">
+                    <div class="section-title">💵 Tax Breakdown</div>
+
+                    <div class="result-item">
+                        <span class="result-label">PPN (Value Added Tax)</span>
+                        <span class="result-value" id="result-ppn-ppn">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Total (DPP + PPN)</span>
+                        <span class="result-value" id="result-ppn-total">IDR 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PPNBM Results -->
+            <div id="ppnbm-results" style="display: none;">
+                <div class="section-title">📊 PPNBM Calculation</div>
+
+                <div class="result-item">
+                    <span class="result-label">DPP (Tax Base)</span>
+                    <span class="result-value" id="result-ppnbm-dpp">IDR 0</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">PPN Rate</span>
+                    <span class="result-value" id="result-ppnbm-ppn-rate">0.00%</span>
+                </div>
+
+                <div class="result-item">
+                    <span class="result-label">PPNBM Rate</span>
+                    <span class="result-value" id="result-ppnbm-ppnbm-rate">0.00%</span>
+                </div>
+
+                <div class="result-section">
+                    <div class="section-title">💵 Tax Breakdown</div>
+
+                    <div class="result-item">
+                        <span class="result-label">PPN (Value Added Tax)</span>
+                        <span class="result-value" id="result-ppnbm-ppn">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">PPNBM (Luxury Goods Tax)</span>
+                        <span class="result-value" id="result-ppnbm-ppnbm">IDR 0</span>
+                    </div>
+
+                    <div class="result-item">
+                        <span class="result-label">Total (DPP + PPN + PPNBM)</span>
+                        <span class="result-value" id="result-ppnbm-total">IDR 0</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -302,4 +580,5 @@
 
     <script src="app.js"></script>
 </body>
+
 </html>
