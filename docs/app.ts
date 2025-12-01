@@ -362,6 +362,137 @@ class PPH21Calculator {
             takeHomeMonthly,
         };
     }
+
+    /**
+     * Calculate PPh 21
+     */
+    calculatePPH21(
+        brutoMonthly: number,
+        monthsPaid: number,
+        pensionContribution: number,
+        zakatDonation: number,
+        ptkpStatus: string
+    ): TaxCalculationResult {
+        // Simplified PPh 21 calculation
+        // In a real implementation, this would use the libpph library
+        const brutoAnnual = brutoMonthly * monthsPaid;
+        const ptkp = this.getPTKP(ptkpStatus);
+        const biayaJabatan = Math.min(brutoAnnual * 0.05, 6_000_000);
+        const netto = brutoAnnual - biayaJabatan - (pensionContribution * monthsPaid) - zakatDonation;
+        const pkp = Math.max(0, netto - ptkp);
+        const annualTax = this.calculateProgressiveTax(pkp);
+        
+        return {
+            grossIncome: brutoAnnual,
+            deductions: biayaJabatan + (pensionContribution * monthsPaid) + zakatDonation,
+            ptkp,
+            taxableIncome: pkp,
+            annualTax,
+            monthlyTax: annualTax / 12,
+            effectiveTaxRate: (annualTax / brutoAnnual) * 100,
+            takeHomeAnnual: brutoAnnual - annualTax,
+            takeHomeMonthly: (brutoAnnual - annualTax) / 12,
+        };
+    }
+
+    /**
+     * Calculate PPh 22
+     */
+    calculatePPH22(dpp: number, rate: number): TaxCalculationResult {
+        const tax = dpp * (rate / 100);
+        return {
+            grossIncome: dpp,
+            deductions: 0,
+            ptkp: 0,
+            taxableIncome: dpp,
+            annualTax: tax,
+            monthlyTax: tax / 12,
+            effectiveTaxRate: rate,
+            takeHomeAnnual: dpp - tax,
+            takeHomeMonthly: (dpp - tax) / 12,
+        };
+    }
+
+    /**
+     * Calculate PPh 23
+     */
+    calculatePPH23(bruto: number, rate: number): TaxCalculationResult {
+        const tax = bruto * (rate / 100);
+        return {
+            grossIncome: bruto,
+            deductions: 0,
+            ptkp: 0,
+            taxableIncome: bruto,
+            annualTax: tax,
+            monthlyTax: tax / 12,
+            effectiveTaxRate: rate,
+            takeHomeAnnual: bruto - tax,
+            takeHomeMonthly: (bruto - tax) / 12,
+        };
+    }
+
+    /**
+     * Calculate PPh Final Pasal 4(2)
+     */
+    calculatePPH42(bruto: number, rate: number): TaxCalculationResult {
+        const tax = bruto * (rate / 100);
+        return {
+            grossIncome: bruto,
+            deductions: 0,
+            ptkp: 0,
+            taxableIncome: bruto,
+            annualTax: tax,
+            monthlyTax: tax / 12,
+            effectiveTaxRate: rate,
+            takeHomeAnnual: bruto - tax,
+            takeHomeMonthly: (bruto - tax) / 12,
+        };
+    }
+
+    /**
+     * Calculate PPN
+     */
+    calculatePPN(dpp: number, rate: number, mode: number): TaxCalculationResult {
+        let tax: number;
+        if (mode === 1) { // Inclusive
+            tax = dpp - (dpp / (1 + rate / 100));
+        } else { // Exclusive
+            tax = dpp * (rate / 100);
+        }
+        
+        return {
+            grossIncome: dpp + tax,
+            deductions: 0,
+            ptkp: 0,
+            taxableIncome: dpp,
+            annualTax: tax,
+            monthlyTax: tax / 12,
+            effectiveTaxRate: (tax / dpp) * 100,
+            takeHomeAnnual: dpp,
+            takeHomeMonthly: dpp / 12,
+        };
+    }
+
+    /**
+     * Calculate PPnBM
+     */
+    calculatePPnBM(dpp: number, ppnRate: number, ppnbmRate: number): TaxCalculationResult {
+        const ppn = dpp * (ppnRate / 100);
+        const ppnbm = dpp * (ppnbmRate / 100);
+        const totalTax = ppn + ppnbm;
+        
+        return {
+            grossIncome: dpp + totalTax,
+            deductions: 0,
+            ptkp: 0,
+            taxableIncome: dpp,
+            annualTax: totalTax,
+            monthlyTax: totalTax / 12,
+            effectiveTaxRate: (totalTax / dpp) * 100,
+            takeHomeAnnual: dpp,
+            takeHomeMonthly: dpp / 12,
+        };
+    }
 }
 
 class PPH22Calculator {
@@ -644,6 +775,43 @@ function updateBonusList(): void {
 
 // Make removeBonus available globally
 (window as any).removeBonus = removeBonus;
+
+/**
+ * Show/hide dynamic fields based on tax type
+ */
+function toggleDynamicFields(): void {
+    const taxType = taxTypeInput.value;
+    
+    // Hide all dynamic fields
+    pph21Fields.classList.remove('show');
+    pph22Fields.classList.remove('show');
+    pph23Fields.classList.remove('show');
+    pph42Fields.classList.remove('show');
+    ppnFields.classList.remove('show');
+    ppnbmFields.classList.remove('show');
+    
+    // Show relevant fields
+    switch (taxType) {
+        case 'pph21':
+            pph21Fields.classList.add('show');
+            break;
+        case 'pph22':
+            pph22Fields.classList.add('show');
+            break;
+        case 'pph23':
+            pph23Fields.classList.add('show');
+            break;
+        case 'pph42':
+            pph42Fields.classList.add('show');
+            break;
+        case 'ppn':
+            ppnFields.classList.add('show');
+            break;
+        case 'ppnbm':
+            ppnbmFields.classList.add('show');
+            break;
+    }
+}
 
 /**
  * Display error message
