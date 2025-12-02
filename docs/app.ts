@@ -1,3 +1,5 @@
+import Decimal from './decimal.js';
+
 // PPH Calculator Types
 
 // Tax Type Enum
@@ -169,31 +171,33 @@ class PPH21Calculator {
     /**
      * Get PTKP (Non-taxable income) amount based on status
      */
-    getPTKP(status: string): number {
-        return PTKP_RATES[status] || PTKP_RATES['TK'];
+    getPTKP(status: string): Decimal {
+        return new Decimal(PTKP_RATES[status] || PTKP_RATES['TK']);
     }
 
     /**
      * Calculate progressive tax using Pasal 17 rates
      */
-    calculateProgressiveTax(pkp: number): number {
-        if (pkp <= 0) return 0;
+    calculateProgressiveTax(pkp: Decimal): Decimal {
+        if (pkp.lte(0)) return new Decimal(0);
 
-        let tax = 0;
-        let previousLimit = 0;
+        let tax = new Decimal(0);
+        let previousLimit = new Decimal(0);
 
         for (const bracket of TAX_BRACKETS) {
-            const taxableInBracket = Math.min(pkp, bracket.limit) - previousLimit;
+            const limit = new Decimal(bracket.limit);
+            const rate = new Decimal(bracket.rate);
+            const taxableInBracket = Decimal.min(pkp, limit).minus(previousLimit);
 
-            if (taxableInBracket > 0) {
-                tax += taxableInBracket * bracket.rate;
+            if (taxableInBracket.gt(0)) {
+                tax = tax.plus(taxableInBracket.times(rate));
             }
 
-            if (pkp <= bracket.limit) {
+            if (pkp.lte(limit)) {
                 break;
             }
 
-            previousLimit = bracket.limit;
+            previousLimit = limit;
         }
 
         return tax;
@@ -202,89 +206,91 @@ class PPH21Calculator {
     /**
      * Get TER rate for monthly income and category
      */
-    getTERRate(monthlyIncome: number, category: PPh21TERCategory): number {
+    getTERRate(monthlyIncome: Decimal, category: PPh21TERCategory): Decimal {
         for (const bracket of TER_MONTHLY_RATES) {
-            if (monthlyIncome >= bracket.minIncome && monthlyIncome <= bracket.maxIncome) {
+            if (monthlyIncome.gte(bracket.minIncome) && monthlyIncome.lte(bracket.maxIncome)) {
                 switch (category) {
                     case PPh21TERCategory.A:
-                        return bracket.rateA;
+                        return new Decimal(bracket.rateA);
                     case PPh21TERCategory.B:
-                        return bracket.rateB;
+                        return new Decimal(bracket.rateB);
                     case PPh21TERCategory.C:
-                        return bracket.rateC;
+                        return new Decimal(bracket.rateC);
                 }
             }
         }
         // Default to highest rate if not found
-        return category === PPh21TERCategory.A ? 0.15 : category === PPh21TERCategory.B ? 0.20 : 0.25;
+        return new Decimal(category === PPh21TERCategory.A ? 0.15 : category === PPh21TERCategory.B ? 0.20 : 0.25);
     }
 
     /**
      * Calculate biaya jabatan (position allowance): 5% of gross, max 6 million
      */
-    calculateBiayaJabatan(grossAnnual: number): number {
-        const biaya = grossAnnual * 0.05;
-        return Math.min(biaya, 6_000_000);
+    calculateBiayaJabatan(grossAnnual: Decimal): Decimal {
+        const biaya = grossAnnual.times(0.05);
+        return Decimal.min(biaya, 6_000_000);
     }
 
     /**
      * Round down to nearest thousand
      */
-    roundDownThousand(value: number): number {
-        return Math.floor(value / 1000) * 1000;
+    roundDownThousand(value: Decimal): Decimal {
+        return value.dividedBy(1000).floor().times(1000);
     }
 
     /**
      * Calculate PPh 21 with full details
      */
     calculate(
-        grossMonthly: number,
+        grossMonthlyInput: number,
         ptkpStatus: string,
-        workMonths: number = 12,
+        workMonthsInput: number = 12,
         scheme: PPh21Scheme = PPh21Scheme.TRADITIONAL,
         terCategory: PPh21TERCategory = PPh21TERCategory.B,
-        pensionMonthly: number = 0,
-        zakatAnnual: number = 0,
+        pensionMonthlyInput: number = 0,
+        zakatAnnualInput: number = 0,
         bonuses: PPh21Bonus[] = []
     ): PPh21DetailedResult {
-        // Clamp work months
-        workMonths = Math.max(1, Math.min(12, workMonths));
+        const grossMonthly = new Decimal(grossMonthlyInput);
+        const workMonths = Math.max(1, Math.min(12, workMonthsInput));
+        const pensionMonthly = new Decimal(pensionMonthlyInput);
+        const zakatAnnual = new Decimal(zakatAnnualInput);
 
         // Calculate gross annual from salary
-        const grossFromSalary = grossMonthly * workMonths;
+        const grossFromSalary = grossMonthly.times(workMonths);
 
         // Calculate total bonuses
-        const bonusTotal = bonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
-        const grossAnnual = grossFromSalary + bonusTotal;
+        const bonusTotal = bonuses.reduce((sum, bonus) => sum.plus(bonus.amount), new Decimal(0));
+        const grossAnnual = grossFromSalary.plus(bonusTotal);
 
         // Calculate annual pension contributions
-        const pensionAnnual = pensionMonthly * workMonths;
+        const pensionAnnual = pensionMonthly.times(workMonths);
 
         // Calculate deductions
         const biayaJabatan = this.calculateBiayaJabatan(grossAnnual);
-        const totalDeductions = biayaJabatan + pensionAnnual + zakatAnnual;
+        const totalDeductions = biayaJabatan.plus(pensionAnnual).plus(zakatAnnual);
 
         // Calculate netto
-        const nettoAnnual = grossAnnual - totalDeductions;
+        const nettoAnnual = grossAnnual.minus(totalDeductions);
 
         // Get PTKP
         const ptkp = this.getPTKP(ptkpStatus);
 
         // Calculate PKP (rounded down to thousand)
-        const pkp = this.roundDownThousand(Math.max(0, nettoAnnual - ptkp));
+        const pkp = this.roundDownThousand(Decimal.max(0, nettoAnnual.minus(ptkp)));
 
-        let annualTax: number;
-        let terPaid: number | undefined;
-        let month12Adjustment: number | undefined;
+        let annualTax: Decimal;
+        let terPaid: Decimal | undefined;
+        let month12Adjustment: Decimal | undefined;
         let monthlyBreakdown: PPh21DetailedResult['monthlyBreakdown'] | undefined;
 
         if (scheme === PPh21Scheme.TER) {
             // TER Scheme: Month-by-month calculation
             monthlyBreakdown = [];
-            terPaid = 0;
+            terPaid = new Decimal(0);
 
             // Initialize monthly income array
-            const monthlyIncome: number[] = new Array(12).fill(0);
+            const monthlyIncome: Decimal[] = new Array(12).fill(new Decimal(0));
             for (let i = 0; i < workMonths; i++) {
                 monthlyIncome[i] = grossMonthly;
             }
@@ -293,7 +299,7 @@ class PPH21Calculator {
             for (const bonus of bonuses) {
                 const monthIndex = bonus.month - 1; // Convert to 0-indexed
                 if (monthIndex >= 0 && monthIndex < 12 && monthIndex < workMonths) {
-                    monthlyIncome[monthIndex] += bonus.amount;
+                    monthlyIncome[monthIndex] = monthlyIncome[monthIndex].plus(bonus.amount);
                 }
             }
 
@@ -301,7 +307,7 @@ class PPH21Calculator {
             for (let i = 0; i < 11 && i < workMonths; i++) {
                 const income = monthlyIncome[i];
                 const terRate = this.getTERRate(income, terCategory);
-                const monthTax = income * terRate;
+                const monthTax = income.times(terRate);
 
                 // Check if this month has bonuses
                 const monthBonuses = bonuses.filter(b => b.month === i + 1);
@@ -310,21 +316,21 @@ class PPH21Calculator {
 
                 monthlyBreakdown.push({
                     month: i + 1,
-                    income,
-                    terRate,
-                    tax: monthTax,
+                    income: income.toNumber(),
+                    terRate: terRate.toNumber(),
+                    tax: monthTax.toNumber(),
                     hasBonus,
                     bonusNames: hasBonus ? bonusNames : undefined
                 });
 
-                terPaid += monthTax;
+                terPaid = terPaid.plus(monthTax);
             }
 
             // Calculate annual progressive tax
             annualTax = this.calculateProgressiveTax(pkp);
 
             // Month 12 adjustment
-            month12Adjustment = annualTax - terPaid;
+            month12Adjustment = annualTax.minus(terPaid);
 
         } else {
             // Traditional Scheme: Simple annual progressive tax
@@ -332,165 +338,34 @@ class PPH21Calculator {
         }
 
         // Calculate monthly tax and take-home
-        const monthlyTax = annualTax / 12;
-        const effectiveTaxRate = grossAnnual > 0 ? (annualTax / grossAnnual) * 100 : 0;
-        const takeHomeAnnual = grossAnnual - annualTax;
-        const takeHomeMonthly = takeHomeAnnual / 12;
+        const monthlyTax = annualTax.dividedBy(12);
+        const effectiveTaxRate = grossAnnual.gt(0) ? annualTax.dividedBy(grossAnnual).times(100) : new Decimal(0);
+        const takeHomeAnnual = grossAnnual.minus(annualTax);
+        const takeHomeMonthly = takeHomeAnnual.dividedBy(12);
 
         return {
-            grossMonthly,
-            grossAnnual,
-            bonusTotal,
+            grossMonthly: grossMonthly.toNumber(),
+            grossAnnual: grossAnnual.toNumber(),
+            bonusTotal: bonusTotal.toNumber(),
             bonuses,
             workMonths,
-            biayaJabatan,
-            pensionAnnual,
-            zakatDonation: zakatAnnual,
-            totalDeductions,
-            nettoAnnual,
-            ptkp,
-            pkp,
+            biayaJabatan: biayaJabatan.toNumber(),
+            pensionAnnual: pensionAnnual.toNumber(),
+            zakatDonation: zakatAnnual.toNumber(),
+            totalDeductions: totalDeductions.toNumber(),
+            nettoAnnual: nettoAnnual.toNumber(),
+            ptkp: ptkp.toNumber(),
+            pkp: pkp.toNumber(),
             scheme,
             terCategory: scheme === PPh21Scheme.TER ? terCategory : undefined,
-            annualTax,
-            monthlyTax,
-            effectiveTaxRate,
-            terPaid,
-            month12Adjustment,
+            annualTax: annualTax.toNumber(),
+            monthlyTax: monthlyTax.toNumber(),
+            effectiveTaxRate: effectiveTaxRate.toNumber(),
+            terPaid: terPaid ? terPaid.toNumber() : undefined,
+            month12Adjustment: month12Adjustment ? month12Adjustment.toNumber() : undefined,
             monthlyBreakdown,
-            takeHomeAnnual,
-            takeHomeMonthly,
-        };
-    }
-
-    /**
-     * Calculate PPh 21
-     */
-    calculatePPH21(
-        brutoMonthly: number,
-        monthsPaid: number,
-        pensionContribution: number,
-        zakatDonation: number,
-        ptkpStatus: string
-    ): TaxCalculationResult {
-        // Simplified PPh 21 calculation
-        // In a real implementation, this would use the libpph library
-        const brutoAnnual = brutoMonthly * monthsPaid;
-        const ptkp = this.getPTKP(ptkpStatus);
-        const biayaJabatan = Math.min(brutoAnnual * 0.05, 6_000_000);
-        const netto = brutoAnnual - biayaJabatan - (pensionContribution * monthsPaid) - zakatDonation;
-        const pkp = Math.max(0, netto - ptkp);
-        const annualTax = this.calculateProgressiveTax(pkp);
-        
-        return {
-            grossIncome: brutoAnnual,
-            deductions: biayaJabatan + (pensionContribution * monthsPaid) + zakatDonation,
-            ptkp,
-            taxableIncome: pkp,
-            annualTax,
-            monthlyTax: annualTax / 12,
-            effectiveTaxRate: (annualTax / brutoAnnual) * 100,
-            takeHomeAnnual: brutoAnnual - annualTax,
-            takeHomeMonthly: (brutoAnnual - annualTax) / 12,
-        };
-    }
-
-    /**
-     * Calculate PPh 22
-     */
-    calculatePPH22(dpp: number, rate: number): TaxCalculationResult {
-        const tax = dpp * (rate / 100);
-        return {
-            grossIncome: dpp,
-            deductions: 0,
-            ptkp: 0,
-            taxableIncome: dpp,
-            annualTax: tax,
-            monthlyTax: tax / 12,
-            effectiveTaxRate: rate,
-            takeHomeAnnual: dpp - tax,
-            takeHomeMonthly: (dpp - tax) / 12,
-        };
-    }
-
-    /**
-     * Calculate PPh 23
-     */
-    calculatePPH23(bruto: number, rate: number): TaxCalculationResult {
-        const tax = bruto * (rate / 100);
-        return {
-            grossIncome: bruto,
-            deductions: 0,
-            ptkp: 0,
-            taxableIncome: bruto,
-            annualTax: tax,
-            monthlyTax: tax / 12,
-            effectiveTaxRate: rate,
-            takeHomeAnnual: bruto - tax,
-            takeHomeMonthly: (bruto - tax) / 12,
-        };
-    }
-
-    /**
-     * Calculate PPh Final Pasal 4(2)
-     */
-    calculatePPH42(bruto: number, rate: number): TaxCalculationResult {
-        const tax = bruto * (rate / 100);
-        return {
-            grossIncome: bruto,
-            deductions: 0,
-            ptkp: 0,
-            taxableIncome: bruto,
-            annualTax: tax,
-            monthlyTax: tax / 12,
-            effectiveTaxRate: rate,
-            takeHomeAnnual: bruto - tax,
-            takeHomeMonthly: (bruto - tax) / 12,
-        };
-    }
-
-    /**
-     * Calculate PPN
-     */
-    calculatePPN(dpp: number, rate: number, mode: number): TaxCalculationResult {
-        let tax: number;
-        if (mode === 1) { // Inclusive
-            tax = dpp - (dpp / (1 + rate / 100));
-        } else { // Exclusive
-            tax = dpp * (rate / 100);
-        }
-        
-        return {
-            grossIncome: dpp + tax,
-            deductions: 0,
-            ptkp: 0,
-            taxableIncome: dpp,
-            annualTax: tax,
-            monthlyTax: tax / 12,
-            effectiveTaxRate: (tax / dpp) * 100,
-            takeHomeAnnual: dpp,
-            takeHomeMonthly: dpp / 12,
-        };
-    }
-
-    /**
-     * Calculate PPnBM
-     */
-    calculatePPnBM(dpp: number, ppnRate: number, ppnbmRate: number): TaxCalculationResult {
-        const ppn = dpp * (ppnRate / 100);
-        const ppnbm = dpp * (ppnbmRate / 100);
-        const totalTax = ppn + ppnbm;
-        
-        return {
-            grossIncome: dpp + totalTax,
-            deductions: 0,
-            ptkp: 0,
-            taxableIncome: dpp,
-            annualTax: totalTax,
-            monthlyTax: totalTax / 12,
-            effectiveTaxRate: (totalTax / dpp) * 100,
-            takeHomeAnnual: dpp,
-            takeHomeMonthly: dpp / 12,
+            takeHomeAnnual: takeHomeAnnual.toNumber(),
+            takeHomeMonthly: takeHomeMonthly.toNumber(),
         };
     }
 }
@@ -500,13 +375,15 @@ class PPH22Calculator {
      * Calculate PPh 22 (Import/Export Withholding Tax)
      * Formula: Tax = DPP × Rate
      */
-    calculate(dpp: number, rate: number): PPH22Result {
-        const tax = dpp * (rate / 100);
+    calculate(dppInput: number, rateInput: number): PPH22Result {
+        const dpp = new Decimal(dppInput);
+        const rate = new Decimal(rateInput);
+        const tax = dpp.times(rate.dividedBy(100));
 
         return {
-            dpp,
-            rate,
-            tax,
+            dpp: dpp.toNumber(),
+            rate: rate.toNumber(),
+            tax: tax.toNumber(),
         };
     }
 }
@@ -516,13 +393,15 @@ class PPH23Calculator {
      * Calculate PPh 23 (Service Withholding Tax)
      * Formula: Tax = Gross Income × Rate
      */
-    calculate(grossIncome: number, rate: number): PPH23Result {
-        const tax = grossIncome * (rate / 100);
+    calculate(grossIncomeInput: number, rateInput: number): PPH23Result {
+        const grossIncome = new Decimal(grossIncomeInput);
+        const rate = new Decimal(rateInput);
+        const tax = grossIncome.times(rate.dividedBy(100));
 
         return {
-            grossIncome,
-            rate,
-            tax,
+            grossIncome: grossIncome.toNumber(),
+            rate: rate.toNumber(),
+            tax: tax.toNumber(),
         };
     }
 }
@@ -532,13 +411,15 @@ class PPH42Calculator {
      * Calculate PPh Final Pasal 4(2) (Final Income Tax)
      * Formula: Tax = Gross Income × Rate
      */
-    calculate(grossIncome: number, rate: number): PPH42Result {
-        const tax = grossIncome * (rate / 100);
+    calculate(grossIncomeInput: number, rateInput: number): PPH42Result {
+        const grossIncome = new Decimal(grossIncomeInput);
+        const rate = new Decimal(rateInput);
+        const tax = grossIncome.times(rate.dividedBy(100));
 
         return {
-            grossIncome,
-            rate,
-            tax,
+            grossIncome: grossIncome.toNumber(),
+            rate: rate.toNumber(),
+            tax: tax.toNumber(),
         };
     }
 }
@@ -549,29 +430,31 @@ class PPNCalculator {
      * Exclusive: PPN = DPP × Rate, Total = DPP + PPN
      * Inclusive: DPP = Total / (1 + Rate), PPN = Total - DPP
      */
-    calculate(amount: number, rate: number, mode: PPNMode): PPNResult {
-        let dpp: number;
-        let ppn: number;
-        let total: number;
+    calculate(amountInput: number, rateInput: number, mode: PPNMode): PPNResult {
+        const amount = new Decimal(amountInput);
+        const rate = new Decimal(rateInput);
+        let dpp: Decimal;
+        let ppn: Decimal;
+        let total: Decimal;
 
         if (mode === PPNMode.EXCLUSIVE) {
             // Amount is DPP (before tax)
             dpp = amount;
-            ppn = dpp * (rate / 100);
-            total = dpp + ppn;
+            ppn = dpp.times(rate.dividedBy(100));
+            total = dpp.plus(ppn);
         } else {
             // Amount is Total (after tax, inclusive)
             total = amount;
-            dpp = total / (1 + rate / 100);
-            ppn = total - dpp;
+            dpp = total.dividedBy(new Decimal(1).plus(rate.dividedBy(100)));
+            ppn = total.minus(dpp);
         }
 
         return {
-            dpp,
-            rate,
+            dpp: dpp.toNumber(),
+            rate: rate.toNumber(),
             mode,
-            ppn,
-            total,
+            ppn: ppn.toNumber(),
+            total: total.toNumber(),
         };
     }
 }
@@ -583,18 +466,22 @@ class PPNBMCalculator {
      *          PPNBM = DPP × PPNBM Rate
      *          Total = DPP + PPN + PPNBM
      */
-    calculate(dpp: number, ppnRate: number, ppnbmRate: number): PPNBMResult {
-        const ppn = dpp * (ppnRate / 100);
-        const ppnbm = dpp * (ppnbmRate / 100);
-        const total = dpp + ppn + ppnbm;
+    calculate(dppInput: number, ppnRateInput: number, ppnbmRateInput: number): PPNBMResult {
+        const dpp = new Decimal(dppInput);
+        const ppnRate = new Decimal(ppnRateInput);
+        const ppnbmRate = new Decimal(ppnbmRateInput);
+
+        const ppn = dpp.times(ppnRate.dividedBy(100));
+        const ppnbm = dpp.times(ppnbmRate.dividedBy(100));
+        const total = dpp.plus(ppn).plus(ppnbm);
 
         return {
-            dpp,
-            ppnRate,
-            ppnbmRate,
-            ppn,
-            ppnbm,
-            total,
+            dpp: dpp.toNumber(),
+            ppnRate: ppnRate.toNumber(),
+            ppnbmRate: ppnbmRate.toNumber(),
+            ppn: ppn.toNumber(),
+            ppnbm: ppnbm.toNumber(),
+            total: total.toNumber(),
         };
     }
 }
@@ -776,42 +663,6 @@ function updateBonusList(): void {
 // Make removeBonus available globally
 (window as any).removeBonus = removeBonus;
 
-/**
- * Show/hide dynamic fields based on tax type
- */
-function toggleDynamicFields(): void {
-    const taxType = taxTypeInput.value;
-    
-    // Hide all dynamic fields
-    pph21Fields.classList.remove('show');
-    pph22Fields.classList.remove('show');
-    pph23Fields.classList.remove('show');
-    pph42Fields.classList.remove('show');
-    ppnFields.classList.remove('show');
-    ppnbmFields.classList.remove('show');
-    
-    // Show relevant fields
-    switch (taxType) {
-        case 'pph21':
-            pph21Fields.classList.add('show');
-            break;
-        case 'pph22':
-            pph22Fields.classList.add('show');
-            break;
-        case 'pph23':
-            pph23Fields.classList.add('show');
-            break;
-        case 'pph42':
-            pph42Fields.classList.add('show');
-            break;
-        case 'ppn':
-            ppnFields.classList.add('show');
-            break;
-        case 'ppnbm':
-            ppnbmFields.classList.add('show');
-            break;
-    }
-}
 
 /**
  * Display error message
@@ -1148,6 +999,10 @@ const schemeRadios = document.getElementsByName('pph21Scheme') as NodeListOf<HTM
 schemeRadios.forEach(radio => {
     radio.addEventListener('change', updateSchemeFields);
 });
+
+// Make functions available globally
+(window as any).addBonus = addBonus;
+(window as any).removeBonus = removeBonus;
 
 // Initialize form fields on page load
 updateFormFields();

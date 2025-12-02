@@ -1,4 +1,4 @@
-"use strict";
+import Decimal from './decimal.js';
 var TaxType;
 (function (TaxType) {
     TaxType["PPH21"] = "pph21";
@@ -50,194 +50,210 @@ const TER_MONTHLY_RATES = [
 ];
 class PPH21Calculator {
     getPTKP(status) {
-        return PTKP_RATES[status] || PTKP_RATES['TK'];
+        return new Decimal(PTKP_RATES[status] || PTKP_RATES['TK']);
     }
     calculateProgressiveTax(pkp) {
-        if (pkp <= 0)
-            return 0;
-        let tax = 0;
-        let previousLimit = 0;
+        if (pkp.lte(0))
+            return new Decimal(0);
+        let tax = new Decimal(0);
+        let previousLimit = new Decimal(0);
         for (const bracket of TAX_BRACKETS) {
-            const taxableInBracket = Math.min(pkp, bracket.limit) - previousLimit;
-            if (taxableInBracket > 0) {
-                tax += taxableInBracket * bracket.rate;
+            const limit = new Decimal(bracket.limit);
+            const rate = new Decimal(bracket.rate);
+            const taxableInBracket = Decimal.min(pkp, limit).minus(previousLimit);
+            if (taxableInBracket.gt(0)) {
+                tax = tax.plus(taxableInBracket.times(rate));
             }
-            if (pkp <= bracket.limit) {
+            if (pkp.lte(limit)) {
                 break;
             }
-            previousLimit = bracket.limit;
+            previousLimit = limit;
         }
         return tax;
     }
     getTERRate(monthlyIncome, category) {
         for (const bracket of TER_MONTHLY_RATES) {
-            if (monthlyIncome >= bracket.minIncome && monthlyIncome <= bracket.maxIncome) {
+            if (monthlyIncome.gte(bracket.minIncome) && monthlyIncome.lte(bracket.maxIncome)) {
                 switch (category) {
                     case PPh21TERCategory.A:
-                        return bracket.rateA;
+                        return new Decimal(bracket.rateA);
                     case PPh21TERCategory.B:
-                        return bracket.rateB;
+                        return new Decimal(bracket.rateB);
                     case PPh21TERCategory.C:
-                        return bracket.rateC;
+                        return new Decimal(bracket.rateC);
                 }
             }
         }
-        return category === PPh21TERCategory.A ? 0.15 : category === PPh21TERCategory.B ? 0.20 : 0.25;
+        return new Decimal(category === PPh21TERCategory.A ? 0.15 : category === PPh21TERCategory.B ? 0.20 : 0.25);
     }
     calculateBiayaJabatan(grossAnnual) {
-        const biaya = grossAnnual * 0.05;
-        return Math.min(biaya, 6000000);
+        const biaya = grossAnnual.times(0.05);
+        return Decimal.min(biaya, 6000000);
     }
     roundDownThousand(value) {
-        return Math.floor(value / 1000) * 1000;
+        return value.dividedBy(1000).floor().times(1000);
     }
-    calculate(grossMonthly, ptkpStatus, workMonths = 12, scheme = PPh21Scheme.TRADITIONAL, terCategory = PPh21TERCategory.B, pensionMonthly = 0, zakatAnnual = 0, bonuses = []) {
-        workMonths = Math.max(1, Math.min(12, workMonths));
-        const grossFromSalary = grossMonthly * workMonths;
-        const bonusTotal = bonuses.reduce((sum, bonus) => sum + bonus.amount, 0);
-        const grossAnnual = grossFromSalary + bonusTotal;
-        const pensionAnnual = pensionMonthly * workMonths;
+    calculate(grossMonthlyInput, ptkpStatus, workMonthsInput = 12, scheme = PPh21Scheme.TRADITIONAL, terCategory = PPh21TERCategory.B, pensionMonthlyInput = 0, zakatAnnualInput = 0, bonuses = []) {
+        const grossMonthly = new Decimal(grossMonthlyInput);
+        const workMonths = Math.max(1, Math.min(12, workMonthsInput));
+        const pensionMonthly = new Decimal(pensionMonthlyInput);
+        const zakatAnnual = new Decimal(zakatAnnualInput);
+        const grossFromSalary = grossMonthly.times(workMonths);
+        const bonusTotal = bonuses.reduce((sum, bonus) => sum.plus(bonus.amount), new Decimal(0));
+        const grossAnnual = grossFromSalary.plus(bonusTotal);
+        const pensionAnnual = pensionMonthly.times(workMonths);
         const biayaJabatan = this.calculateBiayaJabatan(grossAnnual);
-        const totalDeductions = biayaJabatan + pensionAnnual + zakatAnnual;
-        const nettoAnnual = grossAnnual - totalDeductions;
+        const totalDeductions = biayaJabatan.plus(pensionAnnual).plus(zakatAnnual);
+        const nettoAnnual = grossAnnual.minus(totalDeductions);
         const ptkp = this.getPTKP(ptkpStatus);
-        const pkp = this.roundDownThousand(Math.max(0, nettoAnnual - ptkp));
+        const pkp = this.roundDownThousand(Decimal.max(0, nettoAnnual.minus(ptkp)));
         let annualTax;
         let terPaid;
         let month12Adjustment;
         let monthlyBreakdown;
         if (scheme === PPh21Scheme.TER) {
             monthlyBreakdown = [];
-            terPaid = 0;
-            const monthlyIncome = new Array(12).fill(0);
+            terPaid = new Decimal(0);
+            const monthlyIncome = new Array(12).fill(new Decimal(0));
             for (let i = 0; i < workMonths; i++) {
                 monthlyIncome[i] = grossMonthly;
             }
             for (const bonus of bonuses) {
                 const monthIndex = bonus.month - 1;
                 if (monthIndex >= 0 && monthIndex < 12 && monthIndex < workMonths) {
-                    monthlyIncome[monthIndex] += bonus.amount;
+                    monthlyIncome[monthIndex] = monthlyIncome[monthIndex].plus(bonus.amount);
                 }
             }
             for (let i = 0; i < 11 && i < workMonths; i++) {
                 const income = monthlyIncome[i];
                 const terRate = this.getTERRate(income, terCategory);
-                const monthTax = income * terRate;
+                const monthTax = income.times(terRate);
                 const monthBonuses = bonuses.filter(b => b.month === i + 1);
                 const hasBonus = monthBonuses.length > 0;
                 const bonusNames = monthBonuses.map(b => b.name).join(', ');
                 monthlyBreakdown.push({
                     month: i + 1,
-                    income,
-                    terRate,
-                    tax: monthTax,
+                    income: income.toNumber(),
+                    terRate: terRate.toNumber(),
+                    tax: monthTax.toNumber(),
                     hasBonus,
                     bonusNames: hasBonus ? bonusNames : undefined
                 });
-                terPaid += monthTax;
+                terPaid = terPaid.plus(monthTax);
             }
             annualTax = this.calculateProgressiveTax(pkp);
-            month12Adjustment = annualTax - terPaid;
+            month12Adjustment = annualTax.minus(terPaid);
         }
         else {
             annualTax = this.calculateProgressiveTax(pkp);
         }
-        const monthlyTax = annualTax / 12;
-        const effectiveTaxRate = grossAnnual > 0 ? (annualTax / grossAnnual) * 100 : 0;
-        const takeHomeAnnual = grossAnnual - annualTax;
-        const takeHomeMonthly = takeHomeAnnual / 12;
+        const monthlyTax = annualTax.dividedBy(12);
+        const effectiveTaxRate = grossAnnual.gt(0) ? annualTax.dividedBy(grossAnnual).times(100) : new Decimal(0);
+        const takeHomeAnnual = grossAnnual.minus(annualTax);
+        const takeHomeMonthly = takeHomeAnnual.dividedBy(12);
         return {
-            grossMonthly,
-            grossAnnual,
-            bonusTotal,
+            grossMonthly: grossMonthly.toNumber(),
+            grossAnnual: grossAnnual.toNumber(),
+            bonusTotal: bonusTotal.toNumber(),
             bonuses,
             workMonths,
-            biayaJabatan,
-            pensionAnnual,
-            zakatDonation: zakatAnnual,
-            totalDeductions,
-            nettoAnnual,
-            ptkp,
-            pkp,
+            biayaJabatan: biayaJabatan.toNumber(),
+            pensionAnnual: pensionAnnual.toNumber(),
+            zakatDonation: zakatAnnual.toNumber(),
+            totalDeductions: totalDeductions.toNumber(),
+            nettoAnnual: nettoAnnual.toNumber(),
+            ptkp: ptkp.toNumber(),
+            pkp: pkp.toNumber(),
             scheme,
             terCategory: scheme === PPh21Scheme.TER ? terCategory : undefined,
-            annualTax,
-            monthlyTax,
-            effectiveTaxRate,
-            terPaid,
-            month12Adjustment,
+            annualTax: annualTax.toNumber(),
+            monthlyTax: monthlyTax.toNumber(),
+            effectiveTaxRate: effectiveTaxRate.toNumber(),
+            terPaid: terPaid ? terPaid.toNumber() : undefined,
+            month12Adjustment: month12Adjustment ? month12Adjustment.toNumber() : undefined,
             monthlyBreakdown,
-            takeHomeAnnual,
-            takeHomeMonthly,
+            takeHomeAnnual: takeHomeAnnual.toNumber(),
+            takeHomeMonthly: takeHomeMonthly.toNumber(),
         };
     }
 }
 class PPH22Calculator {
-    calculate(dpp, rate) {
-        const tax = dpp * (rate / 100);
+    calculate(dppInput, rateInput) {
+        const dpp = new Decimal(dppInput);
+        const rate = new Decimal(rateInput);
+        const tax = dpp.times(rate.dividedBy(100));
         return {
-            dpp,
-            rate,
-            tax,
+            dpp: dpp.toNumber(),
+            rate: rate.toNumber(),
+            tax: tax.toNumber(),
         };
     }
 }
 class PPH23Calculator {
-    calculate(grossIncome, rate) {
-        const tax = grossIncome * (rate / 100);
+    calculate(grossIncomeInput, rateInput) {
+        const grossIncome = new Decimal(grossIncomeInput);
+        const rate = new Decimal(rateInput);
+        const tax = grossIncome.times(rate.dividedBy(100));
         return {
-            grossIncome,
-            rate,
-            tax,
+            grossIncome: grossIncome.toNumber(),
+            rate: rate.toNumber(),
+            tax: tax.toNumber(),
         };
     }
 }
 class PPH42Calculator {
-    calculate(grossIncome, rate) {
-        const tax = grossIncome * (rate / 100);
+    calculate(grossIncomeInput, rateInput) {
+        const grossIncome = new Decimal(grossIncomeInput);
+        const rate = new Decimal(rateInput);
+        const tax = grossIncome.times(rate.dividedBy(100));
         return {
-            grossIncome,
-            rate,
-            tax,
+            grossIncome: grossIncome.toNumber(),
+            rate: rate.toNumber(),
+            tax: tax.toNumber(),
         };
     }
 }
 class PPNCalculator {
-    calculate(amount, rate, mode) {
+    calculate(amountInput, rateInput, mode) {
+        const amount = new Decimal(amountInput);
+        const rate = new Decimal(rateInput);
         let dpp;
         let ppn;
         let total;
         if (mode === PPNMode.EXCLUSIVE) {
             dpp = amount;
-            ppn = dpp * (rate / 100);
-            total = dpp + ppn;
+            ppn = dpp.times(rate.dividedBy(100));
+            total = dpp.plus(ppn);
         }
         else {
             total = amount;
-            dpp = total / (1 + rate / 100);
-            ppn = total - dpp;
+            dpp = total.dividedBy(new Decimal(1).plus(rate.dividedBy(100)));
+            ppn = total.minus(dpp);
         }
         return {
-            dpp,
-            rate,
+            dpp: dpp.toNumber(),
+            rate: rate.toNumber(),
             mode,
-            ppn,
-            total,
+            ppn: ppn.toNumber(),
+            total: total.toNumber(),
         };
     }
 }
 class PPNBMCalculator {
-    calculate(dpp, ppnRate, ppnbmRate) {
-        const ppn = dpp * (ppnRate / 100);
-        const ppnbm = dpp * (ppnbmRate / 100);
-        const total = dpp + ppn + ppnbm;
+    calculate(dppInput, ppnRateInput, ppnbmRateInput) {
+        const dpp = new Decimal(dppInput);
+        const ppnRate = new Decimal(ppnRateInput);
+        const ppnbmRate = new Decimal(ppnbmRateInput);
+        const ppn = dpp.times(ppnRate.dividedBy(100));
+        const ppnbm = dpp.times(ppnbmRate.dividedBy(100));
+        const total = dpp.plus(ppn).plus(ppnbm);
         return {
-            dpp,
-            ppnRate,
-            ppnbmRate,
-            ppn,
-            ppnbm,
-            total,
+            dpp: dpp.toNumber(),
+            ppnRate: ppnRate.toNumber(),
+            ppnbmRate: ppnbmRate.toNumber(),
+            ppn: ppn.toNumber(),
+            ppnbm: ppnbm.toNumber(),
+            total: total.toNumber(),
         };
     }
 }
@@ -601,5 +617,7 @@ const schemeRadios = document.getElementsByName('pph21Scheme');
 schemeRadios.forEach(radio => {
     radio.addEventListener('change', updateSchemeFields);
 });
+window.addBonus = addBonus;
+window.removeBonus = removeBonus;
 updateFormFields();
 updateBonusList();
